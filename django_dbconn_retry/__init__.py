@@ -1,13 +1,15 @@
 # -* encoding: utf-8 *-
 import logging
-
+import os
 from django.apps.config import AppConfig
 from django.db import utils as django_db_utils
 from django.db.backends.base import base as django_db_base
 from django.dispatch import Signal
-
+import time
 from typing import Union, Tuple, Callable, List  # noqa. flake8 #118
 
+
+MAX_RETRIES = os.getenv('DJANGO-DBRECONNECT-MAXRETRY' , 6)
 
 _log = logging.getLogger(__name__)
 default_app_config = 'django_dbconn_retry.DjangoIntegration'
@@ -53,15 +55,24 @@ def monkeypatch_django() -> None:
                     self.connect()
                 except Exception as e:
                     if isinstance(e, _operror_types):
-                        if hasattr(self, "_connection_retries") and self._connection_retries >= 1:
-                            _log.error("Reconnecting to the database didn't help %s", str(e))
+                        if hasattr(self, "_connection_retries") and self._connection_retries >= MAX_RETRIES:
+                            _log.error(f"Tried to reconnect to the database {self._connection_retries}, "
+                                       f"but didn't help {str(e)}")
                             del self._in_connecting
                             post_reconnect.send(self.__class__, dbwrapper=self)
                             raise
                         else:
-                            _log.info("Database connection failed. Refreshing...")
+
+
                             # mark the retry
-                            self._connection_retries = 1
+                            if hasattr(self, '_connection_retries'):
+                                _log.info(f"Database connection failed. Will sleep for {self._connection_retries * 15} "
+                                          f"seconds and retry for the  {self._connection_retries} time")
+                                self._connection_retries += 1
+                                time.sleep(self._connection_retries * 15)
+                            else:
+                                _log.info("Database connection failed. First failure, re-attempt connection")
+                                self._connection_retries = 1
                             # ensure that we retry the connection. Sometimes .closed isn't set correctly.
                             self.connection = None
                             del self._in_connecting
