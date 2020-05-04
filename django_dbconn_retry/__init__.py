@@ -66,12 +66,12 @@ def monkeypatch_django() -> None:
 
                             # mark the retry
                             if hasattr(self, '_connection_retries'):
-                                _log.info(f"Database connection failed. Will sleep for {self._connection_retries * 15} "
+                                _log.error(f"Database connection failed. Will sleep for {self._connection_retries * 15} "
                                           f"seconds and retry for the  {self._connection_retries} time")
                                 self._connection_retries += 1
                                 time.sleep(self._connection_retries * 15)
                             else:
-                                _log.info("Database connection failed. First failure, re-attempt connection")
+                                _log.error("Database connection failed. First failure, re-attempt connection")
                                 self._connection_retries = 1
                             # ensure that we retry the connection. Sometimes .closed isn't set correctly.
                             self.connection = None
